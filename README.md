@@ -8,20 +8,11 @@ I started this project to answer a simple question:
 The short answer is yes. This is the result.
 
 It takes execution telemetry (file modifications, credential access, network egress, keyboard hooks, login attempts, etc.), builds per-entity baselines with Kalman-style smoothing + adaptive thresholds, and flags statistically significant deviations. Flagged events go into a fail-secure review queue that stays blocked until a human (or agent) decides what to do with them.
- 
+
 This is not a finished commercial product. It is a solid, working foundation that I continue to improve.
 
 ---
-### Running tests
 
-```bash
-pip install -e ".[dev]"
-python -m pytest tests -v
-```
-
-43 tests: unit coverage for the statistical core (`SignalSmoother`, `AdaptiveThreshold`, `AnomalyEngine`, `EntityStore`), the fail-secure `ReviewGate` contract and its disk persistence, plus the original end-to-end smoke test across all four detectors.
-
----
 ## What it does
 
 | Catches | Does not catch |
@@ -88,6 +79,15 @@ for anomaly in kl.get_anomalies():
     print(f"[{item.status.value}] {item.plain_language_reason}")
 ```
 
+### Running tests
+
+```bash
+pip install -e ".[dev]"
+python -m pytest tests -v
+```
+
+43 tests: unit coverage for the statistical core (`SignalSmoother`, `AdaptiveThreshold`, `AnomalyEngine`, `EntityStore`), the fail-secure `ReviewGate` contract and its disk persistence, plus the original end-to-end smoke test across all four detectors.
+
 ---
 
 ## What’s inside
@@ -102,6 +102,7 @@ for anomaly in kl.get_anomalies():
 | `BruteforceDetector` | Failed logins weighted by account spray + proxy/VPN + datacenter ASN. |
 | `ReviewGate` | Fail-secure quarantine. Everything stays blocked until explicitly cleared or confirmed. Optionally persists to disk (`ReviewGate(persist_path=...)`) so pending items survive a restart. |
 | `ScriptRunnerAdapter` | Turns raw script/process logs into detector events. |
+| `WindowsSecurityLogCollector` / `WindowsBruteforceAdapter` | Real telemetry: pulls actual failed-logon events from the Windows Security log (`wevtutil`, stdlib only) and feeds `BruteforceDetector`. Everything else in this table works on structured events regardless of source; this is the one path that reads live OS data. See `docs/ARCHITECTURE.md` and `examples/windows_security_log_demo.py`. |
 
 All of the above is pure Python 3.9+ with **zero third-party dependencies**.
 
@@ -152,4 +153,3 @@ See `docs/ARCHITECTURE.md` for the full contracts.
 ## License
 
 MIT. Use it for defensive and educational purposes in environments you own or are authorized to test.
-

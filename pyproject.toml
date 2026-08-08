@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dtdaps"
-version = "1.2.0"
+version = "1.3.0"
 description = "Dynamic Threat Detection & Anomaly Processing Suite — runtime behavioral monitoring with statistical baselining"
 readme = "README.md"
 license = { text = "MIT" }
@@ -38,7 +38,7 @@ dev = ["pytest>=7.0"]
 
 [project.urls]
 Homepage = "https://github.com/ElectrifyCS/Dynamic-Threat-Detection-Anomaly-Processing-Suite"
-Repository = "https://github.com/ElectrifyCS/Dynamic-Threat-Detection-Anomaly-Processing-Suite"
+Repository = "https://github.com/ElectrifyCS/Dynamic-Threat-Detection-Anomaly-Processing-Suite.git"
 
 [tool.setuptools.packages.find]
 where = ["."]

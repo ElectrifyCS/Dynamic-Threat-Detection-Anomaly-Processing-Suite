@@ -7,7 +7,7 @@ Detects anomalous process/script behavior using statistical baselining
 flagged events through a fail-secure review gate.
 """
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 __all__ = [
     "AnomalyEngine",
     "AnomalyResult",
@@ -23,6 +23,8 @@ __all__ = [
     "ReviewItem",
     "ReviewStatus",
     "ScriptRunnerAdapter",
+    "WindowsSecurityLogCollector",
+    "WindowsBruteforceAdapter",
 ]
 
 from .engine import AnomalyEngine, AnomalyResult
@@ -38,3 +40,4 @@ from .detectors import (
 )
 from .triage import ReviewGate, ReviewItem, ReviewStatus
 from .adapter import ScriptRunnerAdapter
+from .telemetry import WindowsSecurityLogCollector, WindowsBruteforceAdapter

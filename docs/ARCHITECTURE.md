@@ -71,6 +71,34 @@ It's fine for realistic pending-review depths; if your queue is
 consistently in the thousands, that's a sign the detectors upstream are
 too noisy for this stage, not a reason to swap in a database.
 
+## Telemetry adapters (real data, not synthetic)
+
+`dtdaps.telemetry` is where live data actually gets collected, as
+opposed to `ScriptRunnerAdapter`, which shapes already-structured event
+dicts regardless of where they came from.
+
+Each collector splits into two layers:
+1. Pure parse/aggregate functions — no I/O, unit-testable on any OS
+   against fixture data (see `tests/test_windows_security_log.py`).
+2. A thin collector class that does the actual I/O and is only
+   meaningfully exercised on its target platform.
+
+`WindowsSecurityLogCollector` pulls Event ID 4625 (failed logon)
+records from the local Security log via `wevtutil` (stdlib subprocess +
+`xml.etree.ElementTree` — no pywin32, no third-party deps). Requires
+rights to read the Security channel (Administrator, or a member of
+"Event Log Readers").
+
+`WindowsBruteforceAdapter` wires that collector into `BruteforceDetector`
++ `ReviewGate` behind a single `.poll()` call, tracking the last-seen
+`EventRecordID` so repeated polls don't double-count.
+
+**Known gap:** `is_proxy_or_vpn` and `asn_type` can't be derived from
+the local event log alone — they're always reported as `False` /
+`"unknown"` here rather than guessed. A real deployment needs to wire
+in an actual IP-intelligence source (GeoIP/ASN lookup, threat-intel
+feed) before those two fields carry real signal.
+
 ## Adding a New Detector
 
 1. Subclass `BaseDetector`.
