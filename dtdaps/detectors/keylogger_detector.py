@@ -7,6 +7,7 @@ Keylogger signals:
 from .base_detector import BaseDetector, AnomalyEvent
 from ..engine import AnomalyEngine
 from ..entity_store import EntityStore
+from typing import Optional
 
 
 class KeyloggerDetector(BaseDetector):
@@ -15,7 +16,7 @@ class KeyloggerDetector(BaseDetector):
         sensitivity: float = 3.0,
         min_samples: int = 15,
         max_entities: int = 10_000,
-        hook_allowlist: set[str] | None = None,
+        hook_allowlist: Optional[set[str]] = None,
     ):
         self.sensitivity = sensitivity
         self.min_samples = min_samples

@@ -12,6 +12,7 @@ Tuning:
 """
 
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -20,7 +21,7 @@ class SignalSmoother:
     measurement_variance: float = 1e-1
 
     def __post_init__(self):
-        self._estimate: float | None = None
+        self._estimate: Optional[float] = None
         self._error_covariance: float = 1.0
 
     def update(self, measurement: float) -> float:
@@ -44,5 +45,5 @@ class SignalSmoother:
         return self._estimate
 
     @property
-    def current_estimate(self) -> float | None:
+    def current_estimate(self) -> Optional[float]:
         return self._estimate
