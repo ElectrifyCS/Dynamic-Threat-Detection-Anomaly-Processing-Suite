@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dtdaps"
+version = "1.1.0"
+description = "Dynamic Threat Detection & Anomaly Processing Suite — runtime behavioral monitoring with statistical baselining"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+authors = [{ name = "Melli" }]
+keywords = [
+    "anomaly-detection",
+    "threat-detection",
+    "runtime-security",
+    "behavioral-analysis",
+    "kalman",
+    "security",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = []  # stdlib only
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/Dynamic-Threat-Detection-Anomaly-Processing-Suite"
+Repository = "https://github.com/yourusername/Dynamic-Threat-Detection-Anomaly-Processing-Suite"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dtdaps*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
