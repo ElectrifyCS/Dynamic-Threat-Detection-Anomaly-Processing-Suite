@@ -91,7 +91,7 @@ for anomaly in kl.get_anomalies():
 | `InfostealerDetector` | Credential access bursts, novel egress destinations, anti-analysis hash checks. |
 | `RansomwareDetector` | File-mod rate + entropy, including intermittent-encryption patterns. |
 | `BruteforceDetector` | Failed logins weighted by account spray + proxy/VPN + datacenter ASN. |
-| `ReviewGate` | Fail-secure quarantine. Everything stays blocked until explicitly cleared or confirmed. |
+| `ReviewGate` | Fail-secure quarantine. Everything stays blocked until explicitly cleared or confirmed. Optionally persists to disk (`ReviewGate(persist_path=...)`) so pending items survive a restart. |
 | `ScriptRunnerAdapter` | Turns raw script/process logs into detector events. |
 
 All of the above is pure Python 3.9+ with **zero third-party dependencies**.
