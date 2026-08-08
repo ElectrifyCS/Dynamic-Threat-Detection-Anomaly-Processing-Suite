@@ -8,11 +8,20 @@ I started this project to answer a simple question:
 The short answer is yes. This is the result.
 
 It takes execution telemetry (file modifications, credential access, network egress, keyboard hooks, login attempts, etc.), builds per-entity baselines with Kalman-style smoothing + adaptive thresholds, and flags statistically significant deviations. Flagged events go into a fail-secure review queue that stays blocked until a human (or agent) decides what to do with them.
-
+ 
 This is not a finished commercial product. It is a solid, working foundation that I continue to improve.
 
 ---
+### Running tests
 
+```bash
+pip install -e ".[dev]"
+python -m pytest tests -v
+```
+
+43 tests: unit coverage for the statistical core (`SignalSmoother`, `AdaptiveThreshold`, `AnomalyEngine`, `EntityStore`), the fail-secure `ReviewGate` contract and its disk persistence, plus the original end-to-end smoke test across all four detectors.
+
+---
 ## What it does
 
 | Catches | Does not catch |
