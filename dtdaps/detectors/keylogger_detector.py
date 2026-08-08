@@ -15,6 +15,7 @@ class KeyloggerDetector(BaseDetector):
         sensitivity: float = 3.0,
         min_samples: int = 15,
         max_entities: int = 10_000,
+        hook_allowlist: set[str] | None = None,
     ):
         self.sensitivity = sensitivity
         self.min_samples = min_samples
@@ -22,12 +23,24 @@ class KeyloggerDetector(BaseDetector):
         self._history: dict[str, int] = {}
         self._pending: list[AnomalyEvent] = []
 
+        # Default allowlist: accessibility tools, input methods, and remapping utilities
         self._hook_allowlist = {
-            "autohotkey.exe",
-            "narrator.exe",
-            "magnify.exe",
-            "osk.exe",
+            # Accessibility & Input Method Engines (IME)
+            "autohotkey.exe",       # Key remapping / macro utility
+            "narrator.exe",         # Screen reader
+            "magnify.exe",          # Magnifier
+            "osk.exe",              # On-Screen Keyboard
+            "ctfmon.exe",           # Text Input Processor (IME)
+            # Screen readers
+            "nvda.exe",             # NVDA screen reader
+            "jaws.exe",             # JAWS screen reader
+            "zoomtext.exe",         # ZoomText magnifier/reader
+            # Additional legitimate input/accessibility tools
+            "inputmethod.exe",      # IME helper
         }
+        # Allow user to extend or override the allowlist
+        if hook_allowlist:
+            self._hook_allowlist.update(hook_allowlist)
 
     def _buffer_engine_for(self, entity: str) -> AnomalyEngine:
         return self._buffer_engines.get_or_create(
