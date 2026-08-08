@@ -143,3 +143,4 @@ See `docs/ARCHITECTURE.md` for the full contracts.
 ## License
 
 MIT. Use it for defensive and educational purposes in environments you own or are authorized to test.
+
