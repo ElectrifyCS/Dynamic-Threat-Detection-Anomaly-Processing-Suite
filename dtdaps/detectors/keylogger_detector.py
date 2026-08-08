@@ -123,6 +123,7 @@ class KeyloggerDetector(BaseDetector):
                     context={
                         "signal": "buffer_write_rate",
                         "recent_occurrences": self._history[entity],
+                        "baseline": baseline,
                         "baseline_rate": baseline,
                         "note": "buffer write rate spike",
                         "human_readable_summary": summary,
