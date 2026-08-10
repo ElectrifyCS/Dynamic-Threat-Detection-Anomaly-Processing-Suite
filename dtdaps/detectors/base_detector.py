@@ -1,108 +1,87 @@
-"""
-base_detector.py
-
-The contract between Phase 1 (detection, your side) and Phase 2
-(insight + mitigation, her side). Every detector -- bruteforce,
-ransomware, whatever comes later -- implements this interface and
-emits AnomalyEvent objects in this exact shape. Agree on this schema
-together before either of you builds much further; it's the seam
-where the two halves of the project meet.
-
-Note on "Phase 2" above: this predates docs/phase_plan.md's later,
-more specific phase naming (Phase 2 = LLM Triage there). Read "Phase 2"
-in this docstring loosely, as "whatever consumes AnomalyEvents
-downstream" -- not a claim about which literal phase that is.
-"""
-
-import math
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, asdict
+﻿from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 import uuid
 
 
 @dataclass
 class AnomalyEvent:
-    detector: str              # e.g. "bruteforce_login_rate"
-    malware_category: str      # e.g. "bruteforce", "ransomware", "rat", "trojan"
-    entity: str                # user id, ip, hostname -- whatever this event is about
-    anomaly_score: float       # 0-1, from AnomalyEngine
-    z_score: float
-    raw_value: float
-    smoothed_value: float
-    context: dict = field(default_factory=dict)   # recent history, baseline, etc.
+    detector: str
+    malware_category: str
+    entity: str
+    anomaly_score: float
+    raw_value: float = 0.0
+    smoothed_value: float = 0.0
+    z_score: float = 0.0
+    context: dict = field(default_factory=dict)
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        return {
+            "event_id": self.event_id,
+            "timestamp": self.timestamp,
+            "detector": self.detector,
+            "malware_category": self.malware_category,
+            "entity": self.entity,
+            "anomaly_score": self.anomaly_score,
+            "raw_value": self.raw_value,
+            "smoothed_value": self.smoothed_value,
+            "z_score": self.z_score,
+            "context": self.context,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "AnomalyEvent":
+        return cls(
+            detector=data["detector"],
+            malware_category=data["malware_category"],
+            entity=data["entity"],
+            anomaly_score=data["anomaly_score"],
+            raw_value=data.get("raw_value", 0.0),
+            smoothed_value=data.get("smoothed_value", 0.0),
+            z_score=data.get("z_score", 0.0),
+            context=data.get("context", {}),
+            event_id=data.get("event_id", str(uuid.uuid4())),
+            timestamp=data.get("timestamp", datetime.now(timezone.utc).isoformat()),
+        )
 
 
-# Context keys every AnomalyEvent needs to be actionable by a human
-# reviewer or a downstream LLM -- not just a bare score. Centralized
-# here (rather than duplicated in each detector or each caller) so
-# there's exactly one place that defines "what makes an event complete."
-REQUIRED_CONTEXT_KEYS = ("human_readable_summary", "agent_action", "false_positive_check")
-
-
-def validate_anomaly_event(event: AnomalyEvent) -> list[str]:
-    """Checks one AnomalyEvent for completeness. Returns a list of
-    problems found -- empty list means valid.
-
-    Deliberately does NOT raise or drop the event itself. What to do
-    with an incomplete event (reject it, log a warning, pass it through
-    flagged) is a policy decision for whoever consumes AnomalyEvents
-    downstream -- the API layer, the ingestion pipeline -- not something
-    to hardcode here. This function only answers "is it complete,"
-    not "what happens if it isn't."
-    """
-    problems: list[str] = []
-
+def validate_anomaly_event(event: AnomalyEvent) -> List[str]:
+    problems = []
     if not event.detector:
-        problems.append("detector is empty")
+        problems.append("missing detector")
     if not event.malware_category:
-        problems.append("malware_category is empty")
+        problems.append("missing malware_category")
     if not event.entity:
-        problems.append("entity is empty")
-
-    # Guards against the exact class of bug the zero-variance fix addressed:
-    # a broken score computation silently producing inf/NaN instead of a
-    # real number. This check exists so that class of failure can never
-    # silently leave the detection layer again, regardless of which
-    # detector produces it or what future bug might reintroduce something
-    # similar.
-    if not isinstance(event.anomaly_score, (int, float)) or not math.isfinite(event.anomaly_score):
-        problems.append(f"anomaly_score is not a finite number: {event.anomaly_score!r}")
-    elif not (0.0 <= event.anomaly_score <= 1.0):
-        problems.append(f"anomaly_score out of [0, 1] range: {event.anomaly_score}")
-
-    if not isinstance(event.z_score, (int, float)) or not math.isfinite(event.z_score):
-        problems.append(f"z_score is not a finite number: {event.z_score!r}")
-
-    for key in REQUIRED_CONTEXT_KEYS:
-        value = event.context.get(key)
-        if not value or not isinstance(value, str) or not value.strip():
-            problems.append(f"context['{key}'] is missing or empty")
-
+        problems.append("missing entity")
+    if event.anomaly_score < 0.0 or event.anomaly_score > 1.0:
+        problems.append(f"invalid anomaly_score: {event.anomaly_score}")
     return problems
 
 
-class BaseDetector(ABC):
-    """Every concrete detector implements ingest() + get_anomalies().
-    Keeps ingestion (how data arrives), scoring (the math, delegated
-    to AnomalyEngine), and decision (score -> flag) cleanly separated
-    from each other."""
+class BaseDetector:
+    def __init__(self, sensitivity: float = 3.0, min_samples: int = 10):
+        self.sensitivity = sensitivity
+        self.min_samples = min_samples
+        self.malware_category = "general"
+        self._anomalies: List[AnomalyEvent] = []
+        self._engines: Dict[str, Any] = {}
 
-    @abstractmethod
-    def ingest(self, event: dict) -> None:
-        """Feed in one raw event (a dict -- shape is detector-specific,
-        e.g. a single log line's worth of fields)."""
+    def _engine_for(self, entity: str):
+        if entity not in self._engines:
+            from dtdaps.engine import DetectionEngine
+            self._engines[entity] = DetectionEngine(
+                sensitivity=self.sensitivity, min_samples=self.min_samples
+            )
+        return self._engines[entity]
+
+    def ingest(self, event: Dict[str, Any]) -> None:
         raise NotImplementedError
 
-    @abstractmethod
-    def get_anomalies(self) -> list[AnomalyEvent]:
-        """Return any AnomalyEvents produced since the last call.
-        Should be safe to call repeatedly (e.g. on a polling loop)."""
-        raise NotImplementedError
+    def get_anomalies(self) -> List[AnomalyEvent]:
+        anomalies = list(self._anomalies)
+        self._anomalies.clear()
+        return anomalies
