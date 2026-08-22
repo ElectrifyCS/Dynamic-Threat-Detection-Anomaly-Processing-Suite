@@ -11,6 +11,9 @@ __version__ = "1.3.0"
 __all__ = [
     "AnomalyEngine",
     "AnomalyResult",
+    "RobustAnomalyEngine",
+    "MultivariateAnomalyEngine",
+    "MultivariateAnomalyResult",
     "EntityStore",
     "BaseDetector",
     "AnomalyEvent",
@@ -27,7 +30,13 @@ __all__ = [
     "WindowsBruteforceAdapter",
 ]
 
-from .engine import AnomalyEngine, AnomalyResult
+from .engine import (
+    AnomalyEngine,
+    AnomalyResult,
+    RobustAnomalyEngine,
+    MultivariateAnomalyEngine,
+    MultivariateAnomalyResult,
+)
 from .entity_store import EntityStore
 from .detectors import (
     BaseDetector,
