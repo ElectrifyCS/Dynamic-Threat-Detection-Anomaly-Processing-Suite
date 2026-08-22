@@ -86,7 +86,7 @@ pip install -e ".[dev]"
 python -m pytest tests -v
 ```
 
-43 tests: unit coverage for the statistical core (`SignalSmoother`, `AdaptiveThreshold`, `AnomalyEngine`, `EntityStore`), the fail-secure `ReviewGate` contract and its disk persistence, plus the original end-to-end smoke test across all four detectors.
+94 tests: unit coverage for the statistical core (`SignalSmoother`, `AdaptiveThreshold`, `AnomalyEngine`, `EntityStore`), the robust (`RobustThreshold`) and multivariate (`MultivariateGaussianBaseline`) baselines, the fail-secure `ReviewGate` contract and its disk persistence, `RansomwareDetector`'s joint-detection wiring, plus the original end-to-end smoke test across all four detectors.
 
 ---
 
@@ -98,7 +98,9 @@ python -m pytest tests -v
 | `EntityStore` | Bounded LRU cache — keeps memory safe even with thousands of entities. |
 | `KeyloggerDetector` | Unauthorized keyboard hooks + buffer-write rate spikes. |
 | `InfostealerDetector` | Credential access bursts, novel egress destinations, anti-analysis hash checks. |
-| `RansomwareDetector` | File-mod rate + entropy, including intermittent-encryption patterns. |
+| `RansomwareDetector` | File-mod rate + entropy, including intermittent-encryption patterns — now also uses `MultivariateAnomalyEngine` to catch cases where rate and entropy are each individually normal but jointly off the entity's learned correlation. |
+| `RobustThreshold` / `RobustAnomalyEngine` | Median/MAD-based variant of the core engine — stays accurate even when up to ~50% of the baseline window is contaminated by outliers, unlike mean/std. |
+| `MultivariateGaussianBaseline` / `MultivariateAnomalyEngine` | Joint Mahalanobis-distance baseline across correlated signals, so a coordinated pattern across multiple signals gets flagged even when no single signal crosses its own threshold. |
 | `BruteforceDetector` | Failed logins weighted by account spray + proxy/VPN + datacenter ASN. |
 | `ReviewGate` | Fail-secure quarantine. Everything stays blocked until explicitly cleared or confirmed. Optionally persists to disk (`ReviewGate(persist_path=...)`) so pending items survive a restart. |
 | `ScriptRunnerAdapter` | Turns raw script/process logs into detector events. |
@@ -135,6 +137,8 @@ The core ideas came from two earlier experiments of mine:
 This repository is the unified, cleaned-up version of those ideas.
 
 It is still evolving. Thresholds, mappings, and schemas are intentionally exposed so they can be adjusted and extended.
+
+**A note on the math.** My background here traces back to IB Mathematics: Analysis and Approaches HL — that's where I first got comfortable with statistics, probability distributions, and the kind of rigorous reasoning this project leans on. The robust (median/MAD) and multivariate (Mahalanobis-distance) baselines added since the initial version are a direct extension of that foundation: taking the same statistical thinking and applying it to problems a single mean-and-variance model can't handle on its own.
 
 ---
 
