@@ -154,6 +154,34 @@ See `docs/ARCHITECTURE.md` for the full contracts.
 
 ---
 
+## Logging
+
+DTDAPS logs through the standard `logging` module under the `dtdaps.*`
+logger namespace — it never calls `logging.basicConfig()` itself, since a
+library configuring the root logger for you is a good way to break your
+application's own logging setup. Turn it on in your own code:
+
+```python
+import logging
+logging.basicConfig(level=logging.INFO)
+```
+
+What you'll see at each level:
+
+- **WARNING** — every anomaly `ReviewGate` blocks (`BLOCKED review_id=... entity=... detector=...`),
+  plus sustained high-cardinality entity eviction (a signal `max_entities` may be too low for your traffic).
+- **INFO** — human decisions on a review item (`CONFIRMED` / `CLEARED`), a persisted queue being reloaded
+  on startup, and per-poll summaries from `WindowsBruteforceAdapter`.
+- **ERROR** — failures that don't stop the process but you should know about: the review queue failing
+  to persist to disk, or `wevtutil` failing/timing out.
+- **DEBUG** — routing decisions with no matching detector, individual entity evictions, and per-fetch
+  counts from the Windows collector.
+
+The `BLOCKED` line at WARNING is the one to alert on if you're wiring this into a SIEM or log
+shipper — it's the fail-secure gate's entire audit trail in one grep-able line.
+
+---
+
 ## License
 
 MIT. Use it for defensive and educational purposes in environments you own or are authorized to test.
