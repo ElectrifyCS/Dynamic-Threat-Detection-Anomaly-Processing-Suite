@@ -115,6 +115,12 @@ class ReviewGate:
         self._persist_path = Path(persist_path) if persist_path else None
         if self._persist_path is not None and self._persist_path.exists():
             self._load()
+            logger.info(
+                "ReviewGate loaded %d persisted item(s) from %s (%d still pending).",
+                len(self._queue),
+                self._persist_path,
+                len(self.pending()),
+            )
 
     def submit(self, event) -> ReviewItem:
         item = ReviewItem(
@@ -126,6 +132,14 @@ class ReviewGate:
         )
         self._queue[item.review_id] = item
         self._save()
+        logger.warning(
+            "BLOCKED review_id=%s entity=%s detector=%s category=%s score=%.3f",
+            item.review_id,
+            event.entity,
+            event.detector,
+            event.malware_category,
+            event.anomaly_score,
+        )
         return item
 
     def pending(self) -> List[ReviewItem]:
@@ -139,6 +153,7 @@ class ReviewGate:
         item.reviewed_at = datetime.now(timezone.utc).isoformat()
         item.reviewer_note = note
         self._save()
+        logger.info("CONFIRMED review_id=%s entity=%s note=%r", review_id, item.event.entity, note)
         return item
 
     def clear(self, review_id: str, note: str = "") -> ReviewItem:
@@ -149,6 +164,7 @@ class ReviewGate:
         item.reviewed_at = datetime.now(timezone.utc).isoformat()
         item.reviewer_note = note
         self._save()
+        logger.info("CLEARED review_id=%s entity=%s note=%r", review_id, item.event.entity, note)
         return item
 
     def get(self, review_id: str) -> Optional[ReviewItem]:
@@ -175,6 +191,12 @@ class ReviewGate:
                 json.dump(payload, f, indent=2)
             os.replace(tmp_path, self._persist_path)
         except Exception:
+            logger.error(
+                "Failed to persist review queue to %s; in-memory queue is "
+                "still intact but the write did not land on disk.",
+                self._persist_path,
+                exc_info=True,
+            )
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
             raise

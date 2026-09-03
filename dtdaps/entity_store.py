@@ -8,8 +8,17 @@ This is the single place that constraint is enforced.
 
 from collections import OrderedDict
 from typing import Callable, Generic, Optional, TypeVar
+import logging
 
 T = TypeVar("T")
+
+logger = logging.getLogger(__name__)
+
+# Every Nth eviction gets a WARNING instead of a DEBUG, so a sustained
+# high-cardinality flood (e.g. a spray attack rotating source entities)
+# is visible without turning on debug logging, but a normal, occasional
+# eviction doesn't spam the logs.
+_WARN_EVERY = 1000
 
 
 class EntityStore(Generic[T]):
@@ -47,8 +56,19 @@ class EntityStore(Generic[T]):
         obj = factory()
         self._store[entity] = obj
         if len(self._store) > self._max_entities:
-            self._store.popitem(last=False)
+            evicted, _ = self._store.popitem(last=False)
             self.eviction_count += 1
+            if self.eviction_count % _WARN_EVERY == 0:
+                logger.warning(
+                    "EntityStore has evicted %d entities so far (max_entities=%d); "
+                    "most recently evicted %r. Rising fast usually means "
+                    "max_entities is too low for real traffic.",
+                    self.eviction_count,
+                    self._max_entities,
+                    evicted,
+                )
+            else:
+                logger.debug("Evicted entity %r (total evictions: %d)", evicted, self.eviction_count)
         return obj
 
     def __len__(self) -> int:

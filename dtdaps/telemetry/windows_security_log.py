@@ -22,11 +22,14 @@ Requires the running process to have rights to read the Security log
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
+import logging
 import subprocess
 import xml.etree.ElementTree as ET
 
 from ..detectors import BruteforceDetector
 from ..triage import ReviewGate, ReviewItem
+
+logger = logging.getLogger(__name__)
 
 _NS = "{http://schemas.microsoft.com/win/2004/08/events/event}"
 _FAILED_LOGON_EVENT_ID = "4625"
@@ -124,17 +127,31 @@ def parse_wevtutil_xml(raw_xml: str) -> List[FailedLogonEvent]:
     wrapped = f"<Events>{raw_xml}</Events>"
     try:
         root = ET.fromstring(wrapped)
-    except ET.ParseError:
+    except ET.ParseError as exc:
+        logger.warning(
+            "Could not parse wevtutil XML output (%s); treating this batch "
+            "as empty rather than failing the whole poll.",
+            exc,
+        )
         return []
 
     events: List[FailedLogonEvent] = []
+    skipped = 0
     for event_elem in root.findall(f"{_NS}Event"):
         try:
             parsed = _parse_single_event(event_elem)
         except (ValueError, TypeError):
-            continue
+            parsed = None
         if parsed is not None:
             events.append(parsed)
+        else:
+            skipped += 1
+    if skipped:
+        logger.debug(
+            "Skipped %d malformed/non-4625 <Event> record(s) out of %d in this batch.",
+            skipped,
+            skipped + len(events),
+        )
     return events
 
 
@@ -215,22 +232,38 @@ class WindowsSecurityLogCollector:
                 cmd, capture_output=True, text=True, timeout=30, check=True
             )
         except FileNotFoundError as exc:
+            logger.error("wevtutil not found on PATH — this collector only runs on Windows.")
             raise RuntimeError(
                 "wevtutil not found on PATH — this collector only runs "
                 "on Windows."
             ) from exc
         except subprocess.CalledProcessError as exc:
+            logger.error(
+                "wevtutil failed (exit %d): %s",
+                exc.returncode,
+                exc.stderr.strip() if exc.stderr else "<no stderr>",
+            )
             raise RuntimeError(
                 f"wevtutil failed (exit {exc.returncode}): "
                 f"{exc.stderr.strip()}. This usually means the current "
                 "process can't read the Security log — try running as "
                 "Administrator or add the account to 'Event Log Readers'."
             ) from exc
+        except subprocess.TimeoutExpired:
+            logger.error("wevtutil timed out after 30s reading channel %r.", self._channel)
+            raise
 
         all_events = parse_wevtutil_xml(result.stdout)
         new_events = _filter_new(all_events, self._last_record_id)
         if all_events:
             self._last_record_id = max(e.record_id for e in all_events)
+        logger.debug(
+            "Fetched %d event(s) from '%s' (%d new since record %d).",
+            len(all_events),
+            self._channel,
+            len(new_events),
+            self._last_record_id,
+        )
         return new_events
 
 
@@ -266,4 +299,11 @@ class WindowsBruteforceAdapter:
         for window in windows:
             self._detector.ingest(window)
 
-        return [self.gate.submit(a) for a in self._detector.get_anomalies()]
+        reviews = [self.gate.submit(a) for a in self._detector.get_anomalies()]
+        logger.info(
+            "Poll: %d failed-logon event(s) -> %d window(s) -> %d new review(s).",
+            len(events),
+            len(windows),
+            len(reviews),
+        )
+        return reviews
