@@ -21,6 +21,8 @@ This is not a finished commercial product. It is a solid, working foundation tha
 | Credential-store access bursts and novel high-volume egress (infostealer-style) | Logic bugs or static vulnerabilities |
 | Unauthorized global keyboard hooks + buffer write spikes (keylogger-style) | Inefficient algorithms |
 | High failed-login rates, password spraying, datacenter-origin traffic (bruteforce-style) | Anything that only exists in source code |
+| Security services stopped, destructive recovery commands, AV/EDR processes killed (defense-tampering) | |
+| Distributed credential-stuffing spread across many sources against one account (low-and-slow spray) | |
 
 It watches **what a process actually does at runtime**, not what the source code looks like. Pair it with a SAST tool if you also want static analysis.
 
@@ -35,6 +37,24 @@ pip install -e .
 # Or without installing (stdlib only)
 PYTHONPATH=. python examples/basic_usage.py
 PYTHONPATH=. python examples/full_pipeline.py
+```
+
+### CLI
+
+Once installed (`pip install -e .`), run the pipeline against a file of
+events without writing any Python:
+
+```bash
+# events.jsonl: one JSON object per line, shaped like ScriptRunnerAdapter expects
+dtdaps run events.jsonl --persist-path queue.json
+
+# or with a config file instead of --sensitivity/--min-samples flags
+dtdaps run events.jsonl --config config.json --persist-path queue.json
+
+# inspect / resolve a persisted queue
+dtdaps review list --persist-path queue.json
+dtdaps review confirm <review_id> --persist-path queue.json --note "confirmed with SOC"
+dtdaps review clear <review_id> --persist-path queue.json --note "planned maintenance"
 ```
 
 ### Minimal example
@@ -86,7 +106,7 @@ pip install -e ".[dev]"
 python -m pytest tests -v
 ```
 
-94 tests: unit coverage for the statistical core (`SignalSmoother`, `AdaptiveThreshold`, `AnomalyEngine`, `EntityStore`), the robust (`RobustThreshold`) and multivariate (`MultivariateGaussianBaseline`) baselines, the fail-secure `ReviewGate` contract and its disk persistence, `RansomwareDetector`'s joint-detection wiring, plus the original end-to-end smoke test across all four detectors.
+118 tests: unit coverage for the statistical core (`SignalSmoother`, `AdaptiveThreshold`, `AnomalyEngine`, `EntityStore`), the robust (`RobustThreshold`) and multivariate (`MultivariateGaussianBaseline`) baselines, the fail-secure `ReviewGate` contract and its disk persistence, `RansomwareDetector`'s joint-detection wiring, `ScriptRunnerAdapter`'s event-type routing (including `DefenseTamperingDetector` and `DistributedSprayDetector`), the config loader, the CLI, plus the original end-to-end smoke test across all four core detectors.
 
 ---
 
@@ -102,9 +122,13 @@ python -m pytest tests -v
 | `RobustThreshold` / `RobustAnomalyEngine` | Median/MAD-based variant of the core engine — stays accurate even when up to ~50% of the baseline window is contaminated by outliers, unlike mean/std. |
 | `MultivariateGaussianBaseline` / `MultivariateAnomalyEngine` | Joint Mahalanobis-distance baseline across correlated signals, so a coordinated pattern across multiple signals gets flagged even when no single signal crosses its own threshold. |
 | `BruteforceDetector` | Failed logins weighted by account spray + proxy/VPN + datacenter ASN. |
+| `DefenseTamperingDetector` | Cross-cutting, allowlist-based: critical security services stopped, destructive recovery commands (shadow-copy deletion, log clearing), AV/EDR processes killed. A single occurrence is the signal — not rate-based like the others. |
+| `DistributedSprayDetector` | CUSUM-based, keyed per **target account** rather than per source — catches a botnet spreading login attempts across many low-volume sources specifically to stay under any single source's rate limit. |
 | `ReviewGate` | Fail-secure quarantine. Everything stays blocked until explicitly cleared or confirmed. Optionally persists to disk (`ReviewGate(persist_path=...)`) so pending items survive a restart. |
-| `ScriptRunnerAdapter` | Turns raw script/process logs into detector events. |
+| `ScriptRunnerAdapter` | Turns raw script/process logs into detector events — routes all six detectors above. |
 | `WindowsSecurityLogCollector` / `WindowsBruteforceAdapter` | Real telemetry: pulls actual failed-logon events from the Windows Security log (`wevtutil`, stdlib only) and feeds `BruteforceDetector`. Everything else in this table works on structured events regardless of source; this is the one path that reads live OS data. See `docs/ARCHITECTURE.md` and `examples/windows_security_log_demo.py`. |
+| `DTDAPSConfig` / `load_config` | JSON/YAML config loading — see **Configuration** below. |
+| `dtdaps` CLI | `dtdaps run` / `dtdaps review` — see **CLI** above. |
 
 All of the above is pure Python 3.9+ with **zero third-party dependencies**.
 
@@ -115,10 +139,13 @@ All of the above is pure Python 3.9+ with **zero third-party dependencies**.
 ```
 dtdaps/
 ├── engine/           # SignalSmoother, AdaptiveThreshold, AnomalyEngine
-├── detectors/        # The four specialized detectors + NoveltyDetector
+├── detectors/        # Six specialized detectors + NoveltyDetector
 ├── triage/           # ReviewGate
+├── telemetry/        # Real OS telemetry collectors (Windows Security log)
 ├── adapter.py
 ├── entity_store.py
+├── config.py         # DTDAPSConfig, load_config
+├── cli.py            # `dtdaps run` / `dtdaps review`
 examples/
 tests/
 docs/
@@ -151,6 +178,41 @@ It is still evolving. Thresholds, mappings, and schemas are intentionally expose
 5. Add baseline-then-spike tests.
 
 See `docs/ARCHITECTURE.md` for the full contracts.
+
+---
+
+## Configuration
+
+Sensitivity, sample thresholds, review-queue persistence, and the
+spray detector's CUSUM parameters can live in a JSON (always) or YAML
+(if `pyyaml` is installed) file instead of Python constructor
+arguments:
+
+```json
+{
+  "sensitivity": 3.0,
+  "min_samples": 15,
+  "review_gate_persist_path": "review_queue.json",
+  "distributed_spray": {
+    "expected_mean": 1.0,
+    "slack": 0.5,
+    "threshold": 10.0,
+    "min_distinct_sources": 3
+  }
+}
+```
+
+```python
+from dtdaps import load_config, ScriptRunnerAdapter
+
+config = load_config("config.json")
+adapter = ScriptRunnerAdapter.from_config(config)
+```
+
+An unrecognized key raises immediately rather than being silently
+ignored — a typo'd key doing nothing is a worse failure mode than a
+loud error at startup. `DefenseTamperingDetector` has no tunable
+knobs (it's allowlist-based) and isn't configurable here.
 
 ---
 

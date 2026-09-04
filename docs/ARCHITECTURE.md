@@ -49,6 +49,27 @@ def get_anomalies(self) -> list[AnomalyEvent]: ...
 - `agent_action`
 - `false_positive_check`
 
+## Detectors and their routed event types
+
+`ScriptRunnerAdapter._route()` maps a `log_entry["type"]` (or `["event_type"]`)
+to exactly one detector and shapes the payload it expects:
+
+| Detector | `type` values routed to it |
+|----------|------------------------------|
+| `KeyloggerDetector` | `keyboard_hook_installed`, `keylogger_activity`, `buffer_write` |
+| `InfostealerDetector` | `credential_access`, `network_egress`, `anti_analysis_check` |
+| `RansomwareDetector` | `file_modification`, `ransomware_activity` |
+| `BruteforceDetector` | `login_attempt` |
+| `DefenseTamperingDetector` | `security_service_stopped`, `destructive_command_detected`, `security_process_terminated` |
+| `DistributedSprayDetector` | `distributed_login_attempt` (keyed by `target_account` + `source_entity`, not the usual `entity`) |
+
+`DefenseTamperingDetector` and `DistributedSprayDetector` don't take
+`sensitivity`/`min_samples` — they're allowlist- and CUSUM-based rather
+than z-score-based, so `ScriptRunnerAdapter` always constructs them
+with their own defaults regardless of the `sensitivity`/`min_samples`
+passed to the adapter itself. See each module's docstring for its
+actual tuning knobs.
+
 ## ReviewGate persistence
 
 `ReviewGate()` is in-memory by default (unchanged behavior). Pass

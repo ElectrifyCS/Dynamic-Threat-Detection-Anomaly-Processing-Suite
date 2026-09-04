@@ -40,6 +40,9 @@ dev = ["pytest>=7.0"]
 Homepage = "https://github.com/ElectrifyCS/Dynamic-Threat-Detection-Anomaly-Processing-Suite"
 Repository = "https://github.com/ElectrifyCS/Dynamic-Threat-Detection-Anomaly-Processing-Suite.git"
 
+[project.scripts]
+dtdaps = "dtdaps.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["dtdaps*"]

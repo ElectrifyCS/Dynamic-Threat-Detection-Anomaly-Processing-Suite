@@ -13,13 +13,21 @@ from .detectors import (
     InfostealerDetector,
     RansomwareDetector,
     BruteforceDetector,
+    DefenseTamperingDetector,
+    DistributedSprayDetector,
 )
 from .triage import ReviewGate, ReviewItem
+from .config import DTDAPSConfig
 
 logger = logging.getLogger(__name__)
 
 _KEYLOGGER_EVENTS = {"keyboard_hook_installed", "keylogger_activity"}
 _RANSOMWARE_EVENTS = {"file_modification", "ransomware_activity"}
+_DEFENSE_TAMPERING_EVENTS = {
+    "security_service_stopped",
+    "destructive_command_detected",
+    "security_process_terminated",
+}
 
 
 class ScriptRunnerAdapter:
@@ -44,6 +52,38 @@ class ScriptRunnerAdapter:
         self.bruteforce = BruteforceDetector(
             sensitivity=sensitivity, min_samples=min_samples
         )
+        # These two are allowlist/CUSUM-based rather than z-score-based,
+        # so they don't take sensitivity/min_samples — see their own
+        # module docstrings for their (differently-shaped) tuning knobs.
+        self.defense_tampering = DefenseTamperingDetector()
+        self.distributed_spray = DistributedSprayDetector()
+
+    @classmethod
+    def from_config(cls, config: DTDAPSConfig) -> "ScriptRunnerAdapter":
+        """Build an adapter from a DTDAPSConfig (see dtdaps.config.load_config).
+
+        Applies sensitivity/min_samples to the four z-score-based
+        detectors, wires ReviewGate persistence if configured, and
+        applies distributed_spray's CUSUM overrides. DefenseTamperingDetector
+        has no tunable knobs and is unaffected by config.
+        """
+        adapter = cls(sensitivity=config.sensitivity, min_samples=config.min_samples)
+        adapter.gate = ReviewGate(persist_path=config.review_gate_persist_path)
+        adapter.distributed_spray = DistributedSprayDetector(
+            expected_mean=config.distributed_spray.expected_mean,
+            slack=config.distributed_spray.slack,
+            threshold=config.distributed_spray.threshold,
+            min_distinct_sources=config.distributed_spray.min_distinct_sources,
+        )
+        logger.info(
+            "ScriptRunnerAdapter built from config: sensitivity=%s min_samples=%s "
+            "persist_path=%s spray_threshold=%s",
+            config.sensitivity,
+            config.min_samples,
+            config.review_gate_persist_path,
+            config.distributed_spray.threshold,
+        )
+        return adapter
 
     def process_script_log(self, log_entry: Dict[str, Any]) -> List[ReviewItem]:
         entity = (
@@ -140,6 +180,24 @@ class ScriptRunnerAdapter:
                 ),
                 "is_proxy_or_vpn": log_entry.get("is_proxy_or_vpn", False),
                 "asn_type": log_entry.get("asn_type", "unknown"),
+            }
+
+        if event_type in _DEFENSE_TAMPERING_EVENTS:
+            return self.defense_tampering, {
+                "entity": entity,
+                "type": event_type,
+                "service_name": log_entry.get("service_name", ""),
+                "command": log_entry.get("command", ""),
+                "process_name": log_entry.get("process_name", ""),
+            }
+
+        if event_type == "distributed_login_attempt":
+            # Different shape on purpose: this detector's key axis is the
+            # TARGET account across many sources, not a single entity.
+            return self.distributed_spray, {
+                "target_account": log_entry.get("target_account", entity),
+                "source_entity": log_entry.get("source_entity", "unknown_source"),
+                "failed_attempts": log_entry.get("failed_attempts", 1),
             }
 
         return None

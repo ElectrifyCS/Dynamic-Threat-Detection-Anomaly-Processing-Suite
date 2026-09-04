@@ -22,12 +22,16 @@ __all__ = [
     "RansomwareDetector",
     "BruteforceDetector",
     "NoveltyDetector",
+    "DefenseTamperingDetector",
+    "DistributedSprayDetector",
     "ReviewGate",
     "ReviewItem",
     "ReviewStatus",
     "ScriptRunnerAdapter",
     "WindowsSecurityLogCollector",
     "WindowsBruteforceAdapter",
+    "DTDAPSConfig",
+    "load_config",
 ]
 
 from .engine import (
@@ -46,7 +50,10 @@ from .detectors import (
     RansomwareDetector,
     BruteforceDetector,
     NoveltyDetector,
+    DefenseTamperingDetector,
+    DistributedSprayDetector,
 )
 from .triage import ReviewGate, ReviewItem, ReviewStatus
 from .adapter import ScriptRunnerAdapter
 from .telemetry import WindowsSecurityLogCollector, WindowsBruteforceAdapter
+from .config import DTDAPSConfig, load_config
