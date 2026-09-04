@@ -9,11 +9,13 @@ BruteforceDetector already expects. No pywin32, no third-party packages —
 
 Honest about its limits: this collector can tell you failure counts and
 how many distinct accounts were targeted from a given source. It CANNOT
-tell you whether a source IP is a proxy/VPN/datacenter address — that
+determine real proxy/VPN/datacenter classification on its own — that
 needs an external IP-intelligence source this project doesn't include.
-`is_proxy_or_vpn` and `asn_type` are always reported as unknown/False
-here rather than guessed. Wire in a real IP-intel lookup before treating
-those two fields as meaningful.
+By default `is_proxy_or_vpn`/`asn_type` are reported as unknown/False
+rather than guessed. Pass an `IPIntelligenceProvider` (see
+`dtdaps.telemetry.ip_intelligence`) to get the one signal available
+offline — telling private/internal addresses apart from public ones —
+or implement one against a real GeoIP/ASN source for full coverage.
 
 Requires the running process to have rights to read the Security log
 (Administrator, or a member of the built-in "Event Log Readers" group).
@@ -28,6 +30,7 @@ import xml.etree.ElementTree as ET
 
 from ..detectors import BruteforceDetector
 from ..triage import ReviewGate, ReviewItem
+from .ip_intelligence import IPIntelligence, IPIntelligenceProvider, NullIPIntelligenceProvider
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +163,9 @@ def _entity_for(event: FailedLogonEvent) -> str:
 
 
 def aggregate_into_windows(
-    events: List[FailedLogonEvent], window_seconds: int = 60
+    events: List[FailedLogonEvent],
+    window_seconds: int = 60,
+    ip_intelligence: Optional[IPIntelligenceProvider] = None,
 ) -> List[Dict]:
     """
     Bucket failed-logon events into fixed time windows per source
@@ -170,9 +175,17 @@ def aggregate_into_windows(
     Events are assumed pre-sorted or unsorted — this sorts internally.
     Windows with zero failures never get emitted (nothing to report),
     so a quiet source simply produces no output for that period.
+
+    `ip_intelligence` fills `is_proxy_or_vpn`/`asn_type` per window when
+    the source is a real IP. Defaults to `NullIPIntelligenceProvider`
+    (always "unknown"/False) — see `dtdaps.telemetry.ip_intelligence`
+    for `PrivateNetworkHeuristicProvider` or how to wire in a real
+    GeoIP/ASN source.
     """
     if not events:
         return []
+
+    provider = ip_intelligence or NullIPIntelligenceProvider()
 
     by_entity_and_window: Dict[tuple, List[FailedLogonEvent]] = {}
     for event in sorted(events, key=lambda e: e.timestamp):
@@ -186,15 +199,15 @@ def aggregate_into_windows(
         by_entity_and_window.items(), key=lambda kv: (kv[0][1], kv[0][0])
     ):
         unique_accounts = {e.target_user for e in bucket}
+        source_ip = bucket[0].source_ip
+        intel = provider.lookup(source_ip) if source_ip else IPIntelligence()
         windows.append(
             {
                 "entity": entity,
                 "failed_logins_last_minute": len(bucket),
                 "unique_accounts_targeted": len(unique_accounts),
-                # Not derivable from the local event log alone — see
-                # module docstring. Left explicit rather than guessed.
-                "is_proxy_or_vpn": False,
-                "asn_type": "unknown",
+                "is_proxy_or_vpn": intel.is_proxy_or_vpn,
+                "asn_type": intel.asn_type,
             }
         )
     return windows
@@ -280,6 +293,7 @@ class WindowsBruteforceAdapter:
         min_samples: int = 10,
         window_seconds: int = 60,
         gate: Optional[ReviewGate] = None,
+        ip_intelligence: Optional[IPIntelligenceProvider] = None,
     ):
         self._collector = WindowsSecurityLogCollector()
         self._detector = BruteforceDetector(
@@ -287,6 +301,9 @@ class WindowsBruteforceAdapter:
         )
         self.gate = gate or ReviewGate()
         self._window_seconds = window_seconds
+        # Defaults to NullIPIntelligenceProvider (honest "unknown") via
+        # aggregate_into_windows itself if left unset here.
+        self._ip_intelligence = ip_intelligence
 
     def poll(self) -> List[ReviewItem]:
         """Fetch new failed-logon events since the last poll, feed them
@@ -295,7 +312,11 @@ class WindowsBruteforceAdapter:
         if not events:
             return []
 
-        windows = aggregate_into_windows(events, window_seconds=self._window_seconds)
+        windows = aggregate_into_windows(
+            events,
+            window_seconds=self._window_seconds,
+            ip_intelligence=self._ip_intelligence,
+        )
         for window in windows:
             self._detector.ingest(window)
 

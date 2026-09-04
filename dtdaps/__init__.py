@@ -7,7 +7,7 @@ Detects anomalous process/script behavior using statistical baselining
 flagged events through a fail-secure review gate.
 """
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 __all__ = [
     "AnomalyEngine",
     "AnomalyResult",

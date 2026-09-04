@@ -114,11 +114,18 @@ rights to read the Security channel (Administrator, or a member of
 + `ReviewGate` behind a single `.poll()` call, tracking the last-seen
 `EventRecordID` so repeated polls don't double-count.
 
-**Known gap:** `is_proxy_or_vpn` and `asn_type` can't be derived from
-the local event log alone — they're always reported as `False` /
-`"unknown"` here rather than guessed. A real deployment needs to wire
-in an actual IP-intelligence source (GeoIP/ASN lookup, threat-intel
-feed) before those two fields carry real signal.
+**Partially closed gap:** `is_proxy_or_vpn` and `asn_type` can't be
+fully derived from the local event log alone — real proxy/VPN/datacenter
+classification of a public IP needs an external IP-intelligence source
+(GeoIP/ASN lookup, threat-intel feed) this project doesn't bundle.
+What it *can* do with zero external dependencies, via
+`dtdaps.telemetry.ip_intelligence.PrivateNetworkHeuristicProvider`, is
+tell a private/internal address (RFC1918, loopback, link-local) apart
+from a public one — pass a provider instance to `WindowsBruteforceAdapter`
+or `aggregate_into_windows()`. The default (`NullIPIntelligenceProvider`)
+preserves the original honest "unknown" behavior. Implement
+`IPIntelligenceProvider` against a real GeoIP/ASN source for full
+public-IP coverage.
 
 ## Adding a New Detector
 

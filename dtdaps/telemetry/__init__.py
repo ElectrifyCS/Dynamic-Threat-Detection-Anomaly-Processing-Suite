@@ -22,6 +22,12 @@ from .windows_security_log import (
     WindowsSecurityLogCollector,
     WindowsBruteforceAdapter,
 )
+from .ip_intelligence import (
+    IPIntelligence,
+    IPIntelligenceProvider,
+    NullIPIntelligenceProvider,
+    PrivateNetworkHeuristicProvider,
+)
 
 __all__ = [
     "FailedLogonEvent",
@@ -29,4 +35,8 @@ __all__ = [
     "aggregate_into_windows",
     "WindowsSecurityLogCollector",
     "WindowsBruteforceAdapter",
+    "IPIntelligence",
+    "IPIntelligenceProvider",
+    "NullIPIntelligenceProvider",
+    "PrivateNetworkHeuristicProvider",
 ]

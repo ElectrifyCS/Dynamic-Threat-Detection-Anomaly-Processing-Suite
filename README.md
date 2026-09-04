@@ -1,5 +1,7 @@
 # Dynamic Threat Detection & Anomaly Processing Suite (DTDAPS)
 
+[![Tests](https://github.com/ElectrifyCS/Dynamic-Threat-Detection-Anomaly-Processing-Suite/actions/workflows/tests.yml/badge.svg)](https://github.com/ElectrifyCS/Dynamic-Threat-Detection-Anomaly-Processing-Suite/actions/workflows/tests.yml)
+
 A runtime behavioral monitoring framework I built to detect anomalous process and script activity using statistical baselining.
 
 I started this project to answer a simple question:  
@@ -106,7 +108,7 @@ pip install -e ".[dev]"
 python -m pytest tests -v
 ```
 
-118 tests: unit coverage for the statistical core (`SignalSmoother`, `AdaptiveThreshold`, `AnomalyEngine`, `EntityStore`), the robust (`RobustThreshold`) and multivariate (`MultivariateGaussianBaseline`) baselines, the fail-secure `ReviewGate` contract and its disk persistence, `RansomwareDetector`'s joint-detection wiring, `ScriptRunnerAdapter`'s event-type routing (including `DefenseTamperingDetector` and `DistributedSprayDetector`), the config loader, the CLI, plus the original end-to-end smoke test across all four core detectors.
+125 tests: unit coverage for the statistical core (`SignalSmoother`, `AdaptiveThreshold`, `AnomalyEngine`, `EntityStore`), the robust (`RobustThreshold`) and multivariate (`MultivariateGaussianBaseline`) baselines, the fail-secure `ReviewGate` contract and its disk persistence, `RansomwareDetector`'s joint-detection wiring, `ScriptRunnerAdapter`'s event-type routing (including `DefenseTamperingDetector` and `DistributedSprayDetector`), the config loader, the CLI, the pluggable IP intelligence providers, plus the original end-to-end smoke test across all four core detectors.
 
 ---
 
@@ -127,6 +129,7 @@ python -m pytest tests -v
 | `ReviewGate` | Fail-secure quarantine. Everything stays blocked until explicitly cleared or confirmed. Optionally persists to disk (`ReviewGate(persist_path=...)`) so pending items survive a restart. |
 | `ScriptRunnerAdapter` | Turns raw script/process logs into detector events — routes all six detectors above. |
 | `WindowsSecurityLogCollector` / `WindowsBruteforceAdapter` | Real telemetry: pulls actual failed-logon events from the Windows Security log (`wevtutil`, stdlib only) and feeds `BruteforceDetector`. Everything else in this table works on structured events regardless of source; this is the one path that reads live OS data. See `docs/ARCHITECTURE.md` and `examples/windows_security_log_demo.py`. |
+| `IPIntelligenceProvider` / `PrivateNetworkHeuristicProvider` | Pluggable proxy/VPN/datacenter classification for `WindowsBruteforceAdapter`. Ships with a stdlib-only heuristic that separates private/internal addresses from public ones; implement the protocol against a real GeoIP/ASN source for full coverage. Defaults to reporting honest "unknown" rather than guessing. |
 | `DTDAPSConfig` / `load_config` | JSON/YAML config loading — see **Configuration** below. |
 | `dtdaps` CLI | `dtdaps run` / `dtdaps review` — see **CLI** above. |
 
@@ -141,7 +144,7 @@ dtdaps/
 ├── engine/           # SignalSmoother, AdaptiveThreshold, AnomalyEngine
 ├── detectors/        # Six specialized detectors + NoveltyDetector
 ├── triage/           # ReviewGate
-├── telemetry/        # Real OS telemetry collectors (Windows Security log)
+├── telemetry/        # Real OS telemetry collectors (Windows Security log) + IP intelligence
 ├── adapter.py
 ├── entity_store.py
 ├── config.py         # DTDAPSConfig, load_config
