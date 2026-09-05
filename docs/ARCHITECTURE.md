@@ -60,15 +60,21 @@ to exactly one detector and shapes the payload it expects:
 | `InfostealerDetector` | `credential_access`, `network_egress`, `anti_analysis_check` |
 | `RansomwareDetector` | `file_modification`, `ransomware_activity` |
 | `BruteforceDetector` | `login_attempt` |
-| `DefenseTamperingDetector` | `security_service_stopped`, `destructive_command_detected`, `security_process_terminated` |
+| `DefenseTamperingDetector` | `security_service_stopped`, `destructive_command_detected`, `security_process_terminated`, `security_setting_tampering`, `uac_bypass_lolbin` |
 | `DistributedSprayDetector` | `distributed_login_attempt` (keyed by `target_account` + `source_entity`, not the usual `entity`) |
+| `TelegramC2Detector` | `network_connection` (only acts on it when `domain` is a Telegram Bot API host) |
+| `MutexFanoutDetector` | `mutex_created` (keyed by `(entity, mutex_name)`, not `entity` alone) |
+| `LOLBinCompilerAbuseDetector` | `compiler_invocation` |
 
-`DefenseTamperingDetector` and `DistributedSprayDetector` don't take
-`sensitivity`/`min_samples` — they're allowlist- and CUSUM-based rather
-than z-score-based, so `ScriptRunnerAdapter` always constructs them
-with their own defaults regardless of the `sensitivity`/`min_samples`
-passed to the adapter itself. See each module's docstring for its
-actual tuning knobs.
+`DefenseTamperingDetector`, `DistributedSprayDetector`, `TelegramC2Detector`,
+and `MutexFanoutDetector` don't take `sensitivity`/`min_samples` — they're
+allowlist-, CUSUM-, or fanout-based rather than z-score-based, so
+`ScriptRunnerAdapter` always constructs them with their own defaults
+(or CUSUM overrides via config) regardless of the `sensitivity`/
+`min_samples` passed to the adapter itself. `LOLBinCompilerAbuseDetector`
+IS z-score-based and does take `sensitivity`/`min_samples`, same as
+the four original core detectors. See each module's docstring for
+its actual tuning knobs.
 
 ## ReviewGate persistence
 

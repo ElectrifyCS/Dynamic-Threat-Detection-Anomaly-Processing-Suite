@@ -24,6 +24,9 @@ __all__ = [
     "NoveltyDetector",
     "DefenseTamperingDetector",
     "DistributedSprayDetector",
+    "TelegramC2Detector",
+    "MutexFanoutDetector",
+    "LOLBinCompilerAbuseDetector",
     "ReviewGate",
     "ReviewItem",
     "ReviewStatus",
@@ -52,6 +55,9 @@ from .detectors import (
     NoveltyDetector,
     DefenseTamperingDetector,
     DistributedSprayDetector,
+    TelegramC2Detector,
+    MutexFanoutDetector,
+    LOLBinCompilerAbuseDetector,
 )
 from .triage import ReviewGate, ReviewItem, ReviewStatus
 from .adapter import ScriptRunnerAdapter

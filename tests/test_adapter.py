@@ -66,6 +66,58 @@ def test_routes_defense_tampering_security_process_terminated():
     assert reviews[0].event.detector == "defense_tampering_security_process_killed"
 
 
+def test_routes_defense_tampering_registry_key_tampering():
+    # Grounded in the diskdiag.exe RAT report: Winlogon Userinit hijack.
+    adapter = ScriptRunnerAdapter()
+    reviews = adapter.process_script_log(
+        {
+            "entity": "host_06",
+            "type": "security_setting_tampering",
+            "registry_key": r"HKLM\Software\Microsoft\Windows NT\CurrentVersion\Winlogon\Userinit",
+        }
+    )
+    assert len(reviews) == 1
+    assert reviews[0].event.detector == "defense_tampering_registry_key"
+
+
+def test_registry_key_tampering_ignores_unrelated_keys():
+    adapter = ScriptRunnerAdapter()
+    reviews = adapter.process_script_log(
+        {
+            "entity": "host_06",
+            "type": "security_setting_tampering",
+            "registry_key": r"HKCU\Software\SomeHarmlessApp\Settings",
+        }
+    )
+    assert reviews == []
+
+
+def test_routes_defense_tampering_uac_bypass():
+    # Grounded in the guloader keylogger report: cmstp.exe UAC bypass.
+    adapter = ScriptRunnerAdapter()
+    reviews = adapter.process_script_log(
+        {
+            "entity": "host_07",
+            "type": "uac_bypass_lolbin",
+            "process_name": "cmstp.exe",
+        }
+    )
+    assert len(reviews) == 1
+    assert reviews[0].event.detector == "defense_tampering_uac_bypass"
+
+
+def test_uac_bypass_ignores_unrelated_binaries():
+    adapter = ScriptRunnerAdapter()
+    reviews = adapter.process_script_log(
+        {
+            "entity": "host_07",
+            "type": "uac_bypass_lolbin",
+            "process_name": "notepad.exe",
+        }
+    )
+    assert reviews == []
+
+
 def test_routes_distributed_spray_across_many_sources():
     adapter = ScriptRunnerAdapter()
     reviews = []

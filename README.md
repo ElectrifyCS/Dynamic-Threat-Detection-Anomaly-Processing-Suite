@@ -23,8 +23,11 @@ This is not a finished commercial product. It is a solid, working foundation tha
 | Credential-store access bursts and novel high-volume egress (infostealer-style) | Logic bugs or static vulnerabilities |
 | Unauthorized global keyboard hooks + buffer write spikes (keylogger-style) | Inefficient algorithms |
 | High failed-login rates, password spraying, datacenter-origin traffic (bruteforce-style) | Anything that only exists in source code |
-| Security services stopped, destructive recovery commands, AV/EDR processes killed (defense-tampering) | |
+| Security services stopped, destructive recovery commands, AV/EDR processes killed, critical registry key hijacks (Defender/Winlogon), UAC-bypass LOLBins (defense-tampering) | |
 | Distributed credential-stuffing spread across many sources against one account (low-and-slow spray) | |
+| A process other than the real client contacting Telegram's Bot API (commodity malware's near-default C2/exfil channel) | |
+| The same mutex claimed by more than one distinct process identity (self-relocation / masquerading) | |
+| Bursts of Windows-signed compiler/build-tool invocations (csc.exe, MSBuild, aspnet_compiler.exe) against an entity's own baseline (LOLBin compiler abuse) | |
 
 It watches **what a process actually does at runtime**, not what the source code looks like. Pair it with a SAST tool if you also want static analysis.
 
@@ -108,7 +111,7 @@ pip install -e ".[dev]"
 python -m pytest tests -v
 ```
 
-125 tests: unit coverage for the statistical core (`SignalSmoother`, `AdaptiveThreshold`, `AnomalyEngine`, `EntityStore`), the robust (`RobustThreshold`) and multivariate (`MultivariateGaussianBaseline`) baselines, the fail-secure `ReviewGate` contract and its disk persistence, `RansomwareDetector`'s joint-detection wiring, `ScriptRunnerAdapter`'s event-type routing (including `DefenseTamperingDetector` and `DistributedSprayDetector`), the config loader, the CLI, the pluggable IP intelligence providers, plus the original end-to-end smoke test across all four core detectors.
+143 tests: unit coverage for the statistical core (`SignalSmoother`, `AdaptiveThreshold`, `AnomalyEngine`, `EntityStore`), the robust (`RobustThreshold`) and multivariate (`MultivariateGaussianBaseline`) baselines, the fail-secure `ReviewGate` contract and its disk persistence, `RansomwareDetector`'s joint-detection wiring, `ScriptRunnerAdapter`'s event-type routing across all nine detectors, the config loader, the CLI, the pluggable IP intelligence providers, plus the original end-to-end smoke test across the four core detectors.
 
 ---
 
@@ -126,8 +129,11 @@ python -m pytest tests -v
 | `BruteforceDetector` | Failed logins weighted by account spray + proxy/VPN + datacenter ASN. |
 | `DefenseTamperingDetector` | Cross-cutting, allowlist-based: critical security services stopped, destructive recovery commands (shadow-copy deletion, log clearing), AV/EDR processes killed. A single occurrence is the signal — not rate-based like the others. |
 | `DistributedSprayDetector` | CUSUM-based, keyed per **target account** rather than per source — catches a botnet spreading login attempts across many low-volume sources specifically to stay under any single source's rate limit. |
+| `TelegramC2Detector` | Allowlist-based: flags any process other than the real Telegram client contacting Telegram's Bot API — a near-default C2/exfil channel for commodity malware-as-a-service kits. |
+| `MutexFanoutDetector` | Fanout-counting, keyed per **(host, mutex name)** rather than per process — flags a mutex claimed by more than one distinct process identity, a strong self-relocation/masquerading signal. |
+| `LOLBinCompilerAbuseDetector` | Rate-based against each entity's own baseline, like `BruteforceDetector` — flags bursts of Windows-signed compiler/build-tool invocations (csc.exe, MSBuild, aspnet_compiler.exe), weighted up when launched from a bare scripting host. |
 | `ReviewGate` | Fail-secure quarantine. Everything stays blocked until explicitly cleared or confirmed. Optionally persists to disk (`ReviewGate(persist_path=...)`) so pending items survive a restart. |
-| `ScriptRunnerAdapter` | Turns raw script/process logs into detector events — routes all six detectors above. |
+| `ScriptRunnerAdapter` | Turns raw script/process logs into detector events — routes all nine detectors above. |
 | `WindowsSecurityLogCollector` / `WindowsBruteforceAdapter` | Real telemetry: pulls actual failed-logon events from the Windows Security log (`wevtutil`, stdlib only) and feeds `BruteforceDetector`. Everything else in this table works on structured events regardless of source; this is the one path that reads live OS data. See `docs/ARCHITECTURE.md` and `examples/windows_security_log_demo.py`. |
 | `IPIntelligenceProvider` / `PrivateNetworkHeuristicProvider` | Pluggable proxy/VPN/datacenter classification for `WindowsBruteforceAdapter`. Ships with a stdlib-only heuristic that separates private/internal addresses from public ones; implement the protocol against a real GeoIP/ASN source for full coverage. Defaults to reporting honest "unknown" rather than guessing. |
 | `DTDAPSConfig` / `load_config` | JSON/YAML config loading — see **Configuration** below. |
@@ -142,7 +148,7 @@ All of the above is pure Python 3.9+ with **zero third-party dependencies**.
 ```
 dtdaps/
 ├── engine/           # SignalSmoother, AdaptiveThreshold, AnomalyEngine
-├── detectors/        # Six specialized detectors + NoveltyDetector
+├── detectors/        # Nine specialized detectors + NoveltyDetector
 ├── triage/           # ReviewGate
 ├── telemetry/        # Real OS telemetry collectors (Windows Security log) + IP intelligence
 ├── adapter.py

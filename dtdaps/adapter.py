@@ -15,6 +15,9 @@ from .detectors import (
     BruteforceDetector,
     DefenseTamperingDetector,
     DistributedSprayDetector,
+    TelegramC2Detector,
+    MutexFanoutDetector,
+    LOLBinCompilerAbuseDetector,
 )
 from .triage import ReviewGate, ReviewItem
 from .config import DTDAPSConfig
@@ -27,6 +30,8 @@ _DEFENSE_TAMPERING_EVENTS = {
     "security_service_stopped",
     "destructive_command_detected",
     "security_process_terminated",
+    "security_setting_tampering",
+    "uac_bypass_lolbin",
 }
 
 
@@ -57,15 +62,25 @@ class ScriptRunnerAdapter:
         # module docstrings for their (differently-shaped) tuning knobs.
         self.defense_tampering = DefenseTamperingDetector()
         self.distributed_spray = DistributedSprayDetector()
+        # New detectors, grounded in the uploaded malware behavior
+        # reports -- see each module's docstring for which report(s)
+        # and specific observed behavior motivated it.
+        self.telegram_c2 = TelegramC2Detector()
+        self.mutex_fanout = MutexFanoutDetector()
+        self.lolbin_compiler = LOLBinCompilerAbuseDetector(
+            sensitivity=sensitivity, min_samples=min_samples
+        )
 
     @classmethod
     def from_config(cls, config: DTDAPSConfig) -> "ScriptRunnerAdapter":
         """Build an adapter from a DTDAPSConfig (see dtdaps.config.load_config).
 
-        Applies sensitivity/min_samples to the four z-score-based
-        detectors, wires ReviewGate persistence if configured, and
-        applies distributed_spray's CUSUM overrides. DefenseTamperingDetector
-        has no tunable knobs and is unaffected by config.
+        Applies sensitivity/min_samples to the five z-score-based
+        detectors (including LOLBinCompilerAbuseDetector), wires
+        ReviewGate persistence if configured, and applies
+        distributed_spray's CUSUM overrides. DefenseTamperingDetector,
+        TelegramC2Detector, and MutexFanoutDetector are allowlist/
+        fanout-based with no tunable knobs and are unaffected by config.
         """
         adapter = cls(sensitivity=config.sensitivity, min_samples=config.min_samples)
         adapter.gate = ReviewGate(persist_path=config.review_gate_persist_path)
@@ -189,6 +204,7 @@ class ScriptRunnerAdapter:
                 "service_name": log_entry.get("service_name", ""),
                 "command": log_entry.get("command", ""),
                 "process_name": log_entry.get("process_name", ""),
+                "registry_key": log_entry.get("registry_key", ""),
             }
 
         if event_type == "distributed_login_attempt":
@@ -198,6 +214,32 @@ class ScriptRunnerAdapter:
                 "target_account": log_entry.get("target_account", entity),
                 "source_entity": log_entry.get("source_entity", "unknown_source"),
                 "failed_attempts": log_entry.get("failed_attempts", 1),
+            }
+
+        if event_type == "network_connection":
+            return self.telegram_c2, {
+                "type": "network_connection",
+                "entity": entity,
+                "process_name": log_entry.get("process_name", ""),
+                "domain": log_entry.get("domain", ""),
+            }
+
+        if event_type == "mutex_created":
+            return self.mutex_fanout, {
+                "entity": entity,
+                "mutex_name": log_entry.get("mutex_name", ""),
+                "process_name": log_entry.get("process_name", ""),
+                "process_path": log_entry.get("process_path", ""),
+            }
+
+        if event_type == "compiler_invocation":
+            return self.lolbin_compiler, {
+                "entity": entity,
+                "compiler_invocations_last_window": log_entry.get(
+                    "compiler_invocations_last_window", 0
+                ),
+                "compiler_name": log_entry.get("compiler_name", "unknown"),
+                "parent_process": log_entry.get("parent_process", "unknown"),
             }
 
         return None
